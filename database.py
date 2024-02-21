@@ -26,10 +26,10 @@ class Book(Base):
     published_date = Column(String)
     publisher = Column(String)
     format = Column(String)
-    original_language = Column(String)
     num_of_ratings = Column(Integer)
     rating = Column(String)
     description = Column(Text)
+    top10k = Column(Integer)
 
     authors = relationship('Author', secondary=book_author, back_populates='books')
 

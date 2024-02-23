@@ -7,7 +7,7 @@ from random import randint
 from database import create_session
 from scraping_common import step_find_book_in_search_results, query_saxo_with_title_or_isbn, extract_book_details_dict, \
     extract_recommendations_list, translate_danish_to_english, create_browser_and_wait_for_page_load
-from scraping_sql import save_to_sql
+from scraping_sql import save_book_details_to_database
 
 # from scraping_sql import run_sql
 
@@ -76,6 +76,6 @@ if __name__ == "__main__":
         book_details_dict["Recommendations"] = extract_recommendations_list(book_page_html)
         book_details_dict["Top10k"] = i + 1
 
-        print('kiskes', book_details_dict)
-        save_to_sql(book_details_dict, session)
+        print(book_details_dict)
+        save_book_details_to_database(book_details_dict, session)
         time.sleep(randint(1, 2))

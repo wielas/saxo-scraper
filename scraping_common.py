@@ -60,7 +60,7 @@ def step_find_book_in_search_results(html_content_search_page, author, title):
 
             # verify that the book matches the search criteria (author and paperbook)
             if is_book_correct(author, book_parsed):
-                print(book_parsed)
+                # print(book_parsed)
                 return book_parsed
 
         logging.exception(f"Failed to find the book in the search results. Title: {title}, Author: {author}")
@@ -112,10 +112,14 @@ def extract_book_details_dict(book_page_html):
     # Extract the rating and number of reviews
     full_reviews = soup.find("div", class_="product-rating")
 
-    rating = full_reviews.find('span', class_="text-l text-800").text.strip()
-    rating = float(rating.replace(",", "."))
-    num_of_reviews = full_reviews.find('span', class_="text-s").text.strip()
-    num_of_reviews = int(num_of_reviews.replace("(", "").replace(")", ""))
+    if full_reviews:
+        rating = full_reviews.find('span', class_="text-l text-800").text.strip()
+        rating = float(rating.replace(",", "."))
+        num_of_reviews = full_reviews.find('span', class_="text-s").text.strip()
+        num_of_reviews = int(num_of_reviews.replace("(", "").replace(")", ""))
+    else:
+        rating = 0
+        num_of_reviews = 0
 
     # Create the dict
     details_dict = book_details_to_dict(details)

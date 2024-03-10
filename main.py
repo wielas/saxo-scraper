@@ -7,9 +7,10 @@ from random import randint
 from database import create_session, Book
 from scraping_common import step_find_book_in_search_results, query_saxo_with_title_or_isbn, extract_book_details_dict, \
     extract_recommendations_list, translate_danish_to_english, create_browser_and_wait_for_page_load
-from scraping_sql import save_book_details_to_database
+from scraping_sql import book_not_found_in_search_results_title, save_book_details_to_database
 
 # from scraping_sql import run_sql
+
 
 logging.basicConfig(filename='data_csv/app_errors.log', level=logging.ERROR,
                     format='%(asctime)s:%(levelname)s:%(message)s')
@@ -35,23 +36,6 @@ def save_to_csv(data, output_file):
     # df.to_csv(output_file, index=False)
 
 
-# def run_csv(book_page_url, output_csv):  OUTDATED
-#     """Run the scraping process for a single book page and append the details to a CSV file."""
-#     book_details = extract_book_details_dict_and_recommendations(book_page_url)
-#     save_to_csv(book_details, output_csv)
-#     time.sleep(randint(1, 2))
-
-
-# def extract_book_page_details(title, author):  OLD APPROACH
-#     print("TITLE: ", title, "AUTHORS:", author)
-#     search_result = query_saxo_with_title_or_isbn(title)
-#     if search_result is None:
-#         print("No search results found for", title)
-#         logging.error(f"No search results found for {title}")
-#
-#     book_page_details = step_find_book_in_search_results(search_result, author, title)
-#     return book_page_details
-
 def is_book_scraped(session, i):
     """Check if the book is already in the database based on top10k value"""
     return session.query(Book).filter(Book.top10k == i).first()
@@ -68,10 +52,10 @@ if __name__ == "__main__":
 
     for i, (title, author) in enumerate(book_info):
         print(f"Scraping book {i + 1} out of {len(book_info)}")
+        # if the book has been scraped in the previous session - continue
         if is_book_scraped(session, i + 1):
             print(f"Book {i + 1} is already in the database")
             continue
-        # write a check for if the book is already in the database based on i
 
         title = translate_danish_to_english(title)
         author = translate_danish_to_english(author)
@@ -80,6 +64,10 @@ if __name__ == "__main__":
         time.sleep(randint(2, 3))
         search_page_book_info = step_find_book_in_search_results(search_page, author,
                                                                  title)  # find the matching book and return its info
+        if search_page_book_info == 'N/A':  # case when the book can't be found in the saxo database
+            book_not_found_in_search_results_title(title, author, session)
+            continue
+
         book_page_html = create_browser_and_wait_for_page_load(
             search_page_book_info["Url"])  # get the fully loaded book page html
         time.sleep(randint(2, 3))

@@ -17,6 +17,7 @@ from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
 
 
+
 def translate_danish_to_english(text):
     translations = {
         'æ': 'ae',
@@ -45,6 +46,7 @@ def query_saxo_with_title_or_isbn(title):
         logging.exception(f"Failed to fetch search results from Saxo.com. Status code: {response.status_code}")
         return None
 
+
 def normalize_author_name(name):
     # Remove common business entity suffixes and punctuation
     suffixes = ['Ltd', 'Inc', 'Co', 'LLC', 'LLP', 'PLC']
@@ -56,6 +58,7 @@ def normalize_author_name(name):
     name = re.sub(r'\s+', ' ', name).strip()
 
     return name.lower()
+
 
 def is_book_correct(author_local, book_parsed):
     """Parse the first author and compare it to the extracted authors. Return True if the names match."""
@@ -80,12 +83,13 @@ def step_find_book_in_search_results(html_content_search_page, author=None, titl
                 # print(book_parsed)
                 return book_parsed
 
-        logging.exception(f"Failed to find the book in the search results. Title: {title}, Author: {author}")
-        return None
+        return 'N/A'
 
     except:
         logging.error(f"Failed to parse the search results. Title: {title}, Author: {author}")
-        return None
+        return False
+
+
 
 
 def create_browser_and_wait_for_page_load(book_detail_page_url):
@@ -102,7 +106,6 @@ def create_browser_and_wait_for_page_load(book_detail_page_url):
         if is_url_redirected:
             return False
 
-
         try:
             WebDriverWait(browser, 15).until(lambda d: d.execute_script('return document.readyState') == 'complete')
             WebDriverWait(browser, 15).until(EC.presence_of_element_located((By.CLASS_NAME, "book-slick-slider")))
@@ -114,7 +117,6 @@ def create_browser_and_wait_for_page_load(book_detail_page_url):
             html = ""
 
     return html
-
 
 
 def extract_book_details_dict(book_page_html):
@@ -211,5 +213,8 @@ def book_details_to_dict(details):
                     value = int(value)
 
                 book_details[key_mapping[key]] = value
+
+        if 'PageCount' not in book_details:
+            book_details['PageCount'] = 0
 
     return book_details

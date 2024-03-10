@@ -20,6 +20,19 @@ TOP10K = "Top10k"
 AUTHORS = "Authors"
 RECOMMENDATIONS = "Recommendations"
 
+BOOK_NOT_AVAILABLE = {ISBN: '9788763840958',
+                      PAGE_COUNT: 0,
+                      PUBLISHED_DATE: 'N/A',
+                      PUBLISHER: 'N/A',
+                      FORMAT: 'N/A',
+                      TITLE: 'N/A',
+                      AUTHORS: [],
+                      NUM_OF_RATINGS: 0,
+                      RATING: 0,
+                      DESCRIPTION: "N/A",
+                      RECOMMENDATIONS: [],
+                      TOP10K: 0}
+
 
 def save_book_details_to_database(book_details, session, parent=None):
     """Save the scraped data into the database."""
@@ -80,7 +93,8 @@ def add_authors_to_book(book, authors, session):
 def save_recommended_books(book, recommended_isbns, session):
     for recommended_isbn in recommended_isbns:
         scrape_and_save_recommended_book(book, recommended_isbn, session)
-        time.sleep(randint(1, 2))
+        time.sleep(1)
+
 
 def scrape_and_save_recommended_book(parent_book, book_isbn, session):  # todo optimize
     """Scrape the details of a recommended book if it does not exist in the database"""
@@ -94,6 +108,9 @@ def scrape_and_save_recommended_book(parent_book, book_isbn, session):  # todo o
             else:  # case when there's many book results for the same isbn
                 search_page = query_saxo_with_title_or_isbn(book_isbn)  # get the search page requrst.text
                 search_page_book_info = step_find_book_in_search_results(search_page)
+                if search_page_book_info == 'N/A':
+                    book_not_found_in_search_results_isbn(book_isbn, session)
+
                 book_page_html = create_browser_and_wait_for_page_load(search_page_book_info["Url"])
                 book_details_dict = get_book_details_dict(book_page_html)
                 save_book_details_to_database(book_details_dict, session, parent_book)
@@ -123,3 +140,20 @@ def get_book_details_dict(book_page_html):
     book_details_dict[RECOMMENDATIONS] = []
     book_details_dict[TOP10K] = 0
     return book_details_dict
+
+
+def book_not_found_in_search_results_isbn(isbn, session):
+    """Log the error and save the book with a default dict"""
+    logging.error(f"No search results found for {isbn}")
+    new = BOOK_NOT_AVAILABLE.copy()
+    new[ISBN] = isbn
+    save_book_details_to_database(new, session)
+
+
+def book_not_found_in_search_results_title(title, author, session):
+    """Log the error and save the book with a default dict"""
+    logging.error(f"No search results found for {title} by {author}")
+    new = BOOK_NOT_AVAILABLE.copy()
+    new[TITLE] = title
+    new[AUTHORS] = [author]
+    save_book_details_to_database(BOOK_NOT_AVAILABLE, session)

@@ -1,7 +1,11 @@
 import logging
+import time
+import traceback
+from random import randint
 
 from database import Author, Book
-from scraping_common import create_browser_and_wait_for_page_load, extract_book_details_dict
+from scraping_common import create_browser_and_wait_for_page_load, extract_book_details_dict, \
+    query_saxo_with_title_or_isbn, step_find_book_in_search_results
 
 ISBN = "ISBN"
 TITLE = "Title"
@@ -33,7 +37,7 @@ def save_book_details_to_database(book_details, session, parent=None):
 
         # add the recommendations
         if book_details["Top10k"]:
-            book.top10k = book_details["Top10k"]  # in case a book was scraped from recommendations before
+            book.top10k = book_details["Top10k"]  # in case a book details were scraped from recommendations before
             save_recommended_books(book, book_details[RECOMMENDATIONS], session)
 
         session.commit()
@@ -42,6 +46,7 @@ def save_book_details_to_database(book_details, session, parent=None):
         session.rollback()
         print(f"An error occurred while saving the book {book_details[TITLE]} details: {e}")
         logging.error(f"In book {book_details[TITLE]} an error occurred while saving the book details: {e}")
+        logging.error(traceback.format_exc())
 
 
 def get_book_by_isbn(session, isbn):
@@ -58,7 +63,7 @@ def create_new_book(book_details):
         format=book_details[FORMAT],
         num_of_ratings=int(book_details[NUM_OF_RATINGS]),
         rating=book_details[RATING],
-        description='desc',
+        description=book_details[DESCRIPTION],
         top10k=book_details[TOP10K]
     )
 
@@ -75,18 +80,37 @@ def add_authors_to_book(book, authors, session):
 def save_recommended_books(book, recommended_isbns, session):
     for recommended_isbn in recommended_isbns:
         scrape_and_save_recommended_book(book, recommended_isbn, session)
+        time.sleep(randint(1, 2))
 
-
-def scrape_and_save_recommended_book(parent_book, book_isbn, session):
+def scrape_and_save_recommended_book(parent_book, book_isbn, session):  # todo optimize
     """Scrape the details of a recommended book if it does not exist in the database"""
     try:
         recommended_book = get_book_by_isbn(session, book_isbn)
         if not recommended_book:
             book_page_html = get_book_page_html(book_isbn)
-            book_details_dict = get_book_details_dict(book_page_html)
-            save_book_details_to_database(book_details_dict, session, parent_book)
+            if book_page_html:
+                book_details_dict = get_book_details_dict(book_page_html)
+                save_book_details_to_database(book_details_dict, session, parent_book)
+            else:  # case when there's many book results for the same isbn
+                search_page = query_saxo_with_title_or_isbn(book_isbn)  # get the search page requrst.text
+                search_page_book_info = step_find_book_in_search_results(search_page)
+                book_page_html = create_browser_and_wait_for_page_load(search_page_book_info["Url"])
+                book_details_dict = get_book_details_dict(book_page_html)
+                save_book_details_to_database(book_details_dict, session, parent_book)
+                logging.info(f"Recovery succeeded for {book_isbn}")
     except Exception as e:
-        logging.error(f"In book {book_isbn} an error occurred while scraping the recommended book details: {e}")
+        logging.error(f"Scraping the recommended book with ISBN {book_isbn}: {e}\n possibly many entries -- retrying.")
+        logging.error(traceback.format_exc())
+        # try:
+        #     search_page = query_saxo_with_title_or_isbn(book_isbn)  # get the search page requrst.text
+        #     search_page_book_info = step_find_book_in_search_results(search_page)
+        #     book_page_html = create_browser_and_wait_for_page_load(search_page_book_info["Url"])
+        #     book_details_dict = get_book_details_dict(book_page_html)
+        #     save_book_details_to_database(book_details_dict, session, parent_book)
+        #     logging.info(f"Recovery succeeded for {book_isbn}")
+        # except Exception as e:
+        #     logging.error(f"Recovery failed for {book_isbn}: {e}")
+        #     logging.error(traceback.format_exc())
 
 
 def get_book_page_html(book_isbn):

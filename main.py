@@ -4,7 +4,7 @@ import os
 import pandas as pd
 from random import randint
 
-from database import create_session
+from database import create_session, Book
 from scraping_common import step_find_book_in_search_results, query_saxo_with_title_or_isbn, extract_book_details_dict, \
     extract_recommendations_list, translate_danish_to_english, create_browser_and_wait_for_page_load
 from scraping_sql import save_book_details_to_database
@@ -52,10 +52,14 @@ def save_to_csv(data, output_file):
 #     book_page_details = step_find_book_in_search_results(search_result, author, title)
 #     return book_page_details
 
+def is_book_scraped(session, i):
+    """Check if the book is already in the database based on top10k value"""
+    return session.query(Book).filter(Book.top10k == i).first()
+
 
 if __name__ == "__main__":
 
-    input_csv = "data_csv/top3.csv"
+    input_csv = "data_csv/top_10k_books.csv"
     output_csv = "data_csv/books-scraped.csv"
     # run_csv(input_csv, output_csv)
 
@@ -63,15 +67,22 @@ if __name__ == "__main__":
     session = create_session()
 
     for i, (title, author) in enumerate(book_info):
+        print(f"Scraping book {i + 1} out of {len(book_info)}")
+        if is_book_scraped(session, i + 1):
+            print(f"Book {i + 1} is already in the database")
+            continue
+        # write a check for if the book is already in the database based on i
+
         title = translate_danish_to_english(title)
         author = translate_danish_to_english(author)
 
         search_page = query_saxo_with_title_or_isbn(title)  # get the search page requrst.text
+        time.sleep(randint(2, 3))
         search_page_book_info = step_find_book_in_search_results(search_page, author,
                                                                  title)  # find the matching book and return its info
         book_page_html = create_browser_and_wait_for_page_load(
             search_page_book_info["Url"])  # get the fully loaded book page html
-
+        time.sleep(randint(2, 3))
         book_details_dict = extract_book_details_dict(book_page_html)
         book_details_dict["Recommendations"] = extract_recommendations_list(book_page_html)
         book_details_dict["Top10k"] = i + 1

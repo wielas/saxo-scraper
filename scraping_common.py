@@ -1,7 +1,10 @@
 import logging
 import os
+import re
 import time
 import json
+import traceback
+from random import randint
 
 import requests
 from bs4 import BeautifulSoup
@@ -42,24 +45,38 @@ def query_saxo_with_title_or_isbn(title):
         logging.exception(f"Failed to fetch search results from Saxo.com. Status code: {response.status_code}")
         return None
 
+def normalize_author_name(name):
+    # Remove common business entity suffixes and punctuation
+    suffixes = ['Ltd', 'Inc', 'Co', 'LLC', 'LLP', 'PLC']
+    pattern = r'\b(?:' + '|'.join(suffixes) + r')\.?\b'
+    name = re.sub(pattern, '', name, flags=re.IGNORECASE)
+
+    # Remove any remaining punctuation and extra whitespace
+    name = re.sub(r'[^\w\s]', '', name)
+    name = re.sub(r'\s+', ' ', name).strip()
+
+    return name.lower()
 
 def is_book_correct(author_local, book_parsed):
     """Parse the first author and compare it to the extracted authors. Return True if the names match."""
     author_local = translate_danish_to_english(author_local.lower().replace('"', "").split(',')[0])
+    author_local_normalized = normalize_author_name(author_local)
+
     author_extracted = [translate_danish_to_english(auth.lower()) for auth in list(book_parsed["Authors"])]
-    return author_local in author_extracted and book_parsed["Work"] in ["Bog", "Brugt bog"]
+    author_extracted_normalized = [normalize_author_name(auth) for auth in author_extracted]
+
+    return author_local_normalized in author_extracted_normalized and book_parsed["Work"] in ["Bog"]
 
 
-def step_find_book_in_search_results(html_content_search_page, author, title):
+def step_find_book_in_search_results(html_content_search_page, author=None, title=None):
     """Parse the search page and find the book's detail page link. Return it if found. Otherwise, return None."""
     try:
         soup_search_page = BeautifulSoup(html_content_search_page, "html.parser")
         for book in soup_search_page.find_all("div", class_="product-list-teaser"):
             book_parsed = translate_danish_to_english(book.find("a").get("data-val"))
             book_parsed = json.loads(book_parsed)
-
             # verify that the book matches the search criteria (author and paperbook)
-            if is_book_correct(author, book_parsed):
+            if author is None or is_book_correct(author, book_parsed):
                 # print(book_parsed)
                 return book_parsed
 
@@ -77,17 +94,27 @@ def create_browser_and_wait_for_page_load(book_detail_page_url):
     chrome_options.add_argument("--headless")
     with Chrome(options=chrome_options) as browser:
         browser.get(book_detail_page_url)
+
+        # case when the book isbn search yields multiple results
+        is_url_redirected = 'query' in browser.current_url
+        print(browser.current_url, is_url_redirected)
+        logging.info(f"URL: {book_detail_page_url}, Redirected: {is_url_redirected}")
+        if is_url_redirected:
+            return False
+
+
         try:
-            WebDriverWait(browser, 10).until(lambda d: d.execute_script('return document.readyState') == 'complete')
-            WebDriverWait(browser, 10).until(EC.presence_of_element_located((By.CLASS_NAME, "book-slick-slider")))
-            time.sleep(1)
+            WebDriverWait(browser, 15).until(lambda d: d.execute_script('return document.readyState') == 'complete')
+            WebDriverWait(browser, 15).until(EC.presence_of_element_located((By.CLASS_NAME, "book-slick-slider")))
             html = browser.page_source
         except TimeoutException:
             print('kurdefiks')
             logging.error(f"Failed to load the page. URL: {book_detail_page_url}")
+            logging.error(traceback.format_exc())
             html = ""
 
     return html
+
 
 
 def extract_book_details_dict(book_page_html):
@@ -113,10 +140,20 @@ def extract_book_details_dict(book_page_html):
     full_reviews = soup.find("div", class_="product-rating")
 
     if full_reviews:
-        rating = full_reviews.find('span', class_="text-l text-800").text.strip()
-        rating = float(rating.replace(",", "."))
-        num_of_reviews = full_reviews.find('span', class_="text-s").text.strip()
-        num_of_reviews = int(num_of_reviews.replace("(", "").replace(")", ""))
+        rating_span = full_reviews.find('span', class_="text-l text-800")
+        num_of_reviews_span = full_reviews.find('span', class_="text-s")
+
+        if rating_span:
+            rating = rating_span.text.strip()
+            rating = float(rating.replace(",", "."))
+        else:
+            rating = 0
+
+        if num_of_reviews_span:
+            num_of_reviews = num_of_reviews_span.text.strip()
+            num_of_reviews = int(num_of_reviews.replace("(", "").replace(")", ""))
+        else:
+            num_of_reviews = 0
     else:
         rating = 0
         num_of_reviews = 0

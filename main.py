@@ -1,4 +1,5 @@
 import logging
+import math
 import time
 import os
 import pandas as pd
@@ -44,24 +45,29 @@ def is_book_scraped(session, i):
 if __name__ == "__main__":
 
     input_csv = "data_csv/top_10k_books.csv"
+    # input_csv = "data_csv/top3.csv"
     output_csv = "data_csv/books-scraped.csv"
     # run_csv(input_csv, output_csv)
 
     book_info = read_input_csv(input_csv)
     session = create_session()
 
+
+
     for i, (title, author) in enumerate(book_info):
         print(f"Scraping book {i + 1} out of {len(book_info)}")
         # if the book has been scraped in the previous session - continue
+        if i <2590:
+            continue
         if is_book_scraped(session, i + 1):
             print(f"Book {i + 1} is already in the database")
             continue
 
         title = translate_danish_to_english(title)
-        author = translate_danish_to_english(author)
+        author = translate_danish_to_english(author) if not type(author)==float else None
 
         search_page = query_saxo_with_title_or_isbn(title)  # get the search page requrst.text
-        time.sleep(randint(2, 3))
+        time.sleep(randint(1, 2))
         search_page_book_info = step_find_book_in_search_results(search_page, author,
                                                                  title)  # find the matching book and return its info
         if search_page_book_info == 'N/A':  # case when the book can't be found in the saxo database
@@ -70,7 +76,6 @@ if __name__ == "__main__":
 
         book_page_html = create_browser_and_wait_for_page_load(
             search_page_book_info["Url"])  # get the fully loaded book page html
-        time.sleep(randint(2, 3))
         book_details_dict = extract_book_details_dict(book_page_html)
         book_details_dict["Recommendations"] = extract_recommendations_list(book_page_html)
         book_details_dict["Top10k"] = i + 1

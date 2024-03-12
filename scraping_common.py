@@ -17,7 +17,6 @@ from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
 
 
-
 def translate_danish_to_english(text):
     translations = {
         'æ': 'ae',
@@ -53,6 +52,9 @@ def normalize_author_name(name):
     pattern = r'\b(?:' + '|'.join(suffixes) + r')\.?\b'
     name = re.sub(pattern, '', name, flags=re.IGNORECASE)
 
+    # Remove any parenthesized content
+    name = re.sub(r'\(.*?\)', '', name)
+
     # Remove any remaining punctuation and extra whitespace
     name = re.sub(r'[^\w\s]', '', name)
     name = re.sub(r'\s+', ' ', name).strip()
@@ -68,7 +70,7 @@ def is_book_correct(author_local, book_parsed):
     author_extracted = [translate_danish_to_english(auth.lower()) for auth in list(book_parsed["Authors"])]
     author_extracted_normalized = [normalize_author_name(auth) for auth in author_extracted]
 
-    return author_local_normalized in author_extracted_normalized and book_parsed["Work"] in ["Bog"]
+    return author_local_normalized in author_extracted_normalized  # and book_parsed["Work"] in ["Bog"]
 
 
 def step_find_book_in_search_results(html_content_search_page, author=None, title=None):
@@ -90,8 +92,6 @@ def step_find_book_in_search_results(html_content_search_page, author=None, titl
         return False
 
 
-
-
 def create_browser_and_wait_for_page_load(book_detail_page_url):
     """Create a browser and wait for the page to load, then return the page source"""
     chrome_options = Options()
@@ -101,14 +101,14 @@ def create_browser_and_wait_for_page_load(book_detail_page_url):
 
         # case when the book isbn search yields multiple results
         is_url_redirected = 'query' in browser.current_url
-        print(browser.current_url, is_url_redirected)
+        print(browser.current_url)
         logging.info(f"URL: {book_detail_page_url}, Redirected: {is_url_redirected}")
         if is_url_redirected:
             return False
 
         try:
-            WebDriverWait(browser, 15).until(lambda d: d.execute_script('return document.readyState') == 'complete')
-            WebDriverWait(browser, 15).until(EC.presence_of_element_located((By.CLASS_NAME, "book-slick-slider")))
+            WebDriverWait(browser, 20).until(lambda d: d.execute_script('return document.readyState') == 'complete')
+            WebDriverWait(browser, 20).until(EC.presence_of_element_located((By.CLASS_NAME, "book-slick-slider")))
             html = browser.page_source
         except TimeoutException:
             print('kurdefiks')
@@ -152,7 +152,7 @@ def extract_book_details_dict(book_page_html):
             rating = 0
 
         if num_of_reviews_span:
-            num_of_reviews = num_of_reviews_span.text.strip()
+            num_of_reviews = num_of_reviews_span.text.strip().split(" ")[0]
             num_of_reviews = int(num_of_reviews.replace("(", "").replace(")", ""))
         else:
             num_of_reviews = 0
